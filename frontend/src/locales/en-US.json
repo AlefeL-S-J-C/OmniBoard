@@ -1,0 +1,39 @@
+{
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "devLogin": "Quick Login (Dev)",
+    "username": "Username",
+    "email": "Email",
+    "password": "Password",
+    "submitLogin": "Login",
+    "submitRegister": "Register",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "signUp": "Sign up",
+    "signIn": "Sign in",
+    "google": "Google",
+    "github": "GitHub",
+    "loading": "Logging in...",
+    "orDev": "Or quick login for testing (dev mode)"
+  },
+  "matchmaking": {
+    "title": "Find Match",
+    "game": "Game",
+    "vsAI": "Play vs AI (instant)",
+    "joinQueue": "Join Queue",
+    "searching": "Searching opponent…",
+    "cancel": "Cancel",
+    "matched": "Match found! Starting..."
+  },
+  "game": {
+    "restart": "Restart",
+    "menu": "Menu",
+    "yourTurn": "Your turn",
+    "opponentTurn": "Opponent's turn"
+  },
+  "replay": {
+    "prev": "← Prev",
+    "next": "Next →"
+  }
+}

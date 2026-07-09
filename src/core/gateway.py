@@ -11,8 +11,7 @@ class GatewayManager:
         self._player_colors: dict[str, dict[int, str]] = {}
 
     async def authenticate(self, token: str) -> dict | None:
-        payload = decode_token(token)
-        return payload
+        return decode_token(token)
 
     async def connect(self, ws: WebSocket, match_id: str, player_id: int):
         await ws.accept()
@@ -28,19 +27,28 @@ class GatewayManager:
     async def disconnect(self, match_id: str, player_id: int):
         self._connections.get(match_id, {}).pop(player_id, None)
         self._player_colors.get(match_id, {}).pop(player_id, None)
+        if not self._connections.get(match_id):
+            self._connections.pop(match_id, None)
+            self._player_colors.pop(match_id, None)
 
     def get_player_color(self, match_id: str, player_id: int) -> str:
         return self._player_colors.get(match_id, {}).get(player_id, "white")
 
     async def broadcast(self, match_id: str, message: dict, exclude: int | None = None):
-        for pid, ws in self._connections.get(match_id, {}).items():
+        for pid, ws in list(self._connections.get(match_id, {}).items()):
             if pid != exclude:
-                await ws.send_json(message)
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    await self.disconnect(match_id, pid)
 
     async def send_to(self, match_id: str, player_id: int, message: dict):
         ws = self._connections.get(match_id, {}).get(player_id)
         if ws:
-            await ws.send_json(message)
+            try:
+                await ws.send_json(message)
+            except Exception:
+                await self.disconnect(match_id, player_id)
 
     async def handle_message(
         self, match_id: str, player_id: int, data: dict, game_manager=None
@@ -48,7 +56,7 @@ class GatewayManager:
         action = data.get("action")
         if action == "roll_dice" and game_manager:
             player_color = self.get_player_color(match_id, player_id)
-            result = game_manager.roll_dice(match_id, player_color)
+            result = await game_manager.roll_dice(match_id, player_color)
             if result:
                 new_state, dice = result
                 await self.broadcast(match_id, {
@@ -72,8 +80,10 @@ class GatewayManager:
                 })
         elif action == "move" and game_manager:
             payload = data.get("payload", {})
+            if not isinstance(payload, dict):
+                payload = {}
             player_color = self.get_player_color(match_id, player_id)
-            valid, new_state, winner, ai_move = game_manager.process_move(
+            valid, new_state, winner, ai_move = await game_manager.process_move(
                 match_id, payload, player_color
             )
             if valid:

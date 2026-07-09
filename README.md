@@ -1,134 +1,293 @@
 # OmniBoard Engine
 
-Motor para jogos de tabuleiro em tempo real com arquitetura pluggable: o núcleo não conhece as regras dos jogos diretamente — interage com uma máquina de estados abstrata, permitindo que Xadrez, Ludo ou Go funcionem sob a mesma infraestrutura.
+Motor para jogos de tabuleiro em tempo real com arquitetura pluggable: o núcleo não conhece as regras dos jogos diretamente — interage com uma máquina de estados abstrata, permitindo que Xadrez, Dama, Go, Ludo, Trilha ou Reversi funcionem sob a mesma infraestrutura.
+
+---
 
 ## Funcionalidades
 
-- **Arquitetura Baseada em Eventos:** Toda ação gera um evento imutável que altera o estado global da partida.
-- **Validação no Servidor (Anti-Cheat):** O front-end é puramente visual — toda jogada é auditada pelo back-end.
-- **Modo vs IA:** Jogue contra o computador em qualquer jogo suportado.
-- **Seletor de Jogos:** Escolha entre 6 jogos diretamente na interface.
-- **Ajuda Contextual:** Botão `?` que exibe regras e descrição das peças de cada jogo.
-- **Botão Reiniciar:** Reinicia a partida atual sem recarregar a página.
-- **Suporte Omnicanal:** WebSockets agnósticos prontos para Web (React) ou Mobile.
+- **Arquitetura Baseada em Eventos** – Toda ação gera um evento imutável que altera o estado global da partida.
+- **Validação no Servidor (Anti‑Cheat)** – O front‑end é puramente visual; toda jogada é auditada pelo back‑end.
+- **Modo vs IA** – Jogue contra o computador em qualquer jogo suportado.
+- **Matchmaking PvP (ELO)** – Fila por tipo de jogo, emparelhamento automático e criação de partida.
+- **Autenticação Completa** – Registro/login com e‑mail/senha (bcrypt + JWT) + placeholders para OAuth (Google, GitHub).
+- **Push Notifications** – Suporte a FCM (Android/Web) e APNs (iOS) para avisar “sua vez”.
+- **Replay / Histórico** – Event‑sourcing no PostgreSQL; endpoint `GET /api/matches/{id}/events` reconstrói a partida lance a lance.
+- **Espectador (Read‑Only WS)** – Conexão `ws://…/ws/watch/{match_id}` para assistir sem jogar.
+- **Seletor de Jogos** – Escolha entre 6 jogos diretamente na interface.
+- **Ajuda Contextual** – Botão `?` que exibe regras e descrição das peças de cada jogo.
+- **Botão Reiniciar** – Reinicia a partida atual sem recarregar a página.
+- **Suporte Omnicanal** – WebSockets agnósticos prontos para Web (React) ou Mobile.
+- **Observabilidade** – OpenTelemetry → Tempo (traces) + Prometheus (`/metrics`).
+- **Internacionalização (i18n)** – pt‑BR e EN (detector de idioma + `localStorage`).
+
+---
 
 ## Jogos Suportados
 
-| Jogo | Tipo | Mecânicas Validadas pelo Servidor |
-|------|------|-----------------------------------|
-| **Xadrez** | Estratégia | Movimentação de todas as peças, xeque-mate, afogamento (empate) |
-| **Dama** | Estratégia | Movimentação diagonal, captura obrigatória em cadeia, transformação em Damas, vitória por eliminação |
-| **Go** | Estratégia | Colocação de pedras, captura por falta de liberdades, contagem de território, 2 passes consecutivos encerram |
-| **Ludo** | Sorte | Dado seguro no servidor, saída com 6, captura, reta final (home stretch), 4 peões no centro vencem, rolagem automática da IA |
-| **Trilha** | Estratégia | 3 fases (colocação/movimento/voo), formação de moinhos com captura |
-| **Reversi** | Estratégia | Inversão em 8 direções, passe automático sem jogadas disponíveis |
+| Jogo   | Tipo      | Mecânicas Validadas pelo Servidor |
+|--------|-----------|-----------------------------------|
+| **Xadrez**   | Estratégia | Movimentação de todas as peças, xeque‑mate, afogamento (empate) |
+| **Dama**     | Estratégia | Movimentação diagonal, captura obrigatória em cadeia, transformação em Damas, vitória por eliminação |
+| **Go**       | Estratégia | Colocação de pedras, captura por falta de liberdades, contagem de território, 2 passes consecutivos encerram |
+| **Ludo**     | Sorte      | Dado seguro no servidor, saída com 6, captura, reta final (home stretch), 4 peões no centro vencem, rolagem automática da IA |
+| **Trilha**   | Estratégia | 3 fases (colocação/movimento/voo), formação de moinhos com captura |
+| **Reversi**  | Estratégia | Inversão em 8 direções, passe automático sem jogadas disponíveis |
+
+---
 
 ## Arquitetura
 
 ```
-[ Front-end (React + Vite) ]
-       |  JSON via WebSocket (direto ws://localhost:8000)
+[ Front‑end (React 19 + Vite + Tailwind v4 + TS) ]
+        │  JSON via WebSocket (ws://host/ws/…)
 [ FastAPI (Container) ]
-       |
-├── [ Matchmaking Pool ]  -- Redis (filas ELO)
-├── [ GameManager ]       -- Valida e aplica jogadas
-│   ├── [ AI Player ]     -- Jogadas automáticas (aleatórias)
-│   └── [ Game Engine ]   -- Plugins (chess, checkers, go, ...)
+        │
+├── [ Matchmaking Pool ]   -- Redis (filas ELO)
+├── [ GameManager ]        -- Valida e aplica jogadas
+│   ├── [ AI Player ]      -- Movimentos aleatórios válidos (plugável)
+│   └── [ Game Engine ]    -- Plugins (chess, checkers, go, ludo, trilha, reversi)
 └── [ Banco Híbrido ]
-    ├── Redis              -- Estado quente (salas ativas)
-    └── PostgreSQL         -- Histórico permanente (event sourcing)
+    ├── Redis               -- Estado quente (salas ativas)
+    └── PostgreSQL          -- Histórico permanente (event sourcing)
 ```
 
-## Estrutura
+---
+
+## Estrutura de Pastas
 
 ```
 omniboard/
-├── docker-compose.yml
+├── docker-compose.yml                # dev (hot‑reload)
+├── docker-compose.prod.yml           # prod (Caddy + TLS + Tempo + Prometheus)
+├── Caddyfile                         # reverse‑proxy + HTTPS automático
+├── Dockerfile                        # multi‑stage Python
 ├── requirements.txt
+├── pytest.ini
+├── .github/workflows/ci.yml          # lint, type‑check, test, build
 ├── src/
-│   ├── main.py                  # FastAPI, WebSocket, endpoints
+│   ├── main.py                       # FastAPI, WS, rotas HTTP
 │   ├── core/
-│   │   ├── gateway.py           # Gerenciamento de conexões WebSocket
-│   │   ├── lobby.py             # Matchmaking por ELO (Redis)
-│   │   └── security.py          # JWT e bcrypt
+│   │   ├── gateway.py                # Gerenciamento de conexões WS
+│   │   ├── lobby.py                  # Matchmaking (Redis + ELO)
+│   │   ├── security.py               # JWT + bcrypt
+│   │   └── observability.py          # OpenTelemetry + Prometheus
 │   ├── database/
-│   │   ├── postgres.py          # SQLAlchemy assíncrono
-│   │   └── redis_client.py      # Conexão Redis
-│   └── games/
-│       ├── base.py              # Classe abstrata BaseGame
-│       ├── manager.py           # GameManager (estado + AI)
-│       ├── ai.py                # Geradores de movimento por jogo
-│       ├── chess.py / checkers.py / go.py
-│       ├── ludo.py / trilha.py / reversi.py
+│   │   ├── postgres.py               # SQLAlchemy assíncrono + modelos
+│   │   ├── redis_client.py
+│   │   └── models.py                 # User, Match, MatchEvent
+│   ├── games/
+│   │   ├── base.py
+│   │   ├── manager.py
+│   │   ├── ai.py
+│   │   ├── chess.py / checkers.py / go.py
+│   │   ├── ludo.py / trilha.py / reversi.py
+│   │   └── push/
+│   │       └── service.py            # FCM / APNs
+│   └── auth/
+│       └── oauth.py                  # Google / GitHub placeholders
 ├── frontend/
-│   ├── index.html
+│   ├── Dockerfile
+│   ├── nginx.conf
 │   ├── package.json
 │   ├── vite.config.ts
+│   ├── tsconfig.json
 │   └── src/
-│       ├── main.tsx / App.tsx
-│       ├── index.css            # Tailwind v4
+│       ├── main.tsx
+│       ├── App.tsx
+│       ├── i18n.ts
+│       ├── locales/pt-BR.json, en-US.json
 │       ├── hooks/useWebSocket.ts
-│       ├── types/chess.ts
-│       ├── utils/
-│       │   ├── board.ts         # Parsing notação xadrez
-│       │   ├── games.ts         # Info dos 6 jogos
-│       │   └── auth.ts          # fetchDevToken
+│       ├── utils/{auth,games,board}.ts
 │       └── components/
-│           ├── Board.tsx        # Dispatch para jogo específico
-│           ├── Square.tsx       # Casa do tabuleiro
-│           ├── LudoBoard.tsx    # Tabuleiro Ludo 15×15 com dado
-│           ├── GoBoard.tsx      # Tabuleiro Go 9×9 com SVG (interseções)
-│           ├── TrilhaBoard.tsx  # Tabuleiro Trilha em SVG
-│           ├── GameInfo.tsx     # Turno atual e indicador de vencedor
-│           ├── GameHelp.tsx     # Card de regras por jogo
-│           ├── ConnectionStatus.tsx
-│           └── DevLogin.tsx     # Login + seletor de jogo
-└── tests/                       # Testes de jogadas
+│           ├── Board.tsx / ChessBoard.tsx / LudoBoard.tsx …
+│           ├── AuthScreen.tsx
+│           ├── MatchmakingScreen.tsx
+│           ├── ReplayPanel.tsx
+│           ├── GameInfo.tsx / GameHelp.tsx / ConnectionStatus.tsx
+└── tests/
+    └── test_games.py + test_integration.py
 ```
+
+---
 
 ## Como Rodar
 
-### Back-end (Docker)
+### Pré‑requisitos
+
+- **Docker Desktop** (backend + PostgreSQL + Redis)
+- **Node.js 18+** (frontend)
+- **Python 3.11+** (opcional, para rodar testes localmente)
+
+---
+
+### 1️⃣  Variáveis de Ambiente
 
 ```bash
+cp .env.example .env
+# Edite .env com suas chaves:
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+#   JWT_SECRET (>=32 chars)
+#   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI
+#   GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET / GITHUB_REDIRECT_URI
+#   FIREBASE_SERVICE_ACCOUNT_JSON (caminho do arquivo ou JSON inline)
+#   LOG_LEVEL=INFO
+```
+
+Frontend (`frontend/.env`):
+
+```env
+VITE_API_URL=https://seu-dominio.com
+VITE_WS_URL=seu-dominio.com
+```
+
+---
+
+### 2️⃣  Desenvolvimento (hot‑reload)
+
+```bash
+# sobe Postgres, Redis e API com reload
 docker compose up -d
+
+# front‑end
+cd frontend
+npm ci
+npm run dev          # http://localhost:5173
 ```
 
-### Front-end
+A API fica em `http://localhost:8000` (Swagger em `/docs`).
+
+---
+
+### 3️⃣  Produção (HTTPS automático via Caddy)
 
 ```bash
-cd frontend
-npm install
-npm run dev
+# certifique‑se de que o domínio aponta para o IP do host
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Abra `http://localhost:5173`, escolha o jogo e ative o modo IA para começar.
+Caddy obtém/renova certificados Let’s Encrypt automaticamente.  
+Serviços expostos:
 
-## API
+| Serviço | Porta | Descrição |
+|---------|-------|-----------|
+| **Frontend** | 80/443 | Arquivos estáticos (nginx) |
+| **API / WS** | 80/443 | Proxied pelo Caddy (`/api/*`, `/ws/*`) |
+| **Prometheus** | 9090 | Métricas (`/metrics`) |
+| **Tempo** | 3200 | Traces OpenTelemetry |
 
-### `POST /api/dev-login`
+---
+
+## API – Resumo
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `POST` | `/api/auth/register` | Cria usuário (username, email, password) → retorna JWT |
+| `POST` | `/api/auth/login` | Login → retorna JWT |
+| `GET`  | `/api/auth/oauth/{provider}` | Inicia fluxo OAuth (google | github) |
+| `POST` | `/api/auth/oauth/{provider}/callback` | Recebe `code`, troca por token, devolve JWT |
+| `GET`  | `/api/games` | Lista jogos disponíveis |
+| `POST` | `/api/matchmaking/join` | Entra na fila (`game_type`, `with_ai`) → `{matched, match_id}` |
+| `POST` | `/api/matchmaking/leave` | Sai da fila |
+| `GET`  | `/api/matches/{id}/events?turn=` | Histórico de lances (replay) |
+| `PUT`  | `/api/users/me/fcm` | Salva token FCM/APNs para push |
+| `WS`   | `/ws/{match_id}/{player_token}?game_type=…&with_ai=…` | Jogador (ações: `move`, `roll_dice`, `restart`) |
+| `WS`   | `/ws/watch/{match_id}?token=` | Espectador (read‑only) |
+| `GET`  | `/health` | Health‑check |
+| `GET`  | `/metrics` | Prometheus metrics |
+
+**Exemplo de payload WS (move – xadrez)**  
 
 ```json
-{ "username": "jogador1", "game_type": "chess", "with_ai": true }
+{ "action": "move", "payload": { "from": "e2", "to": "e4" } }
 ```
 
-Retorna um token JWT para autenticação via WebSocket.
+**Evento de resposta**  
 
-### `GET /api/games`
+```json
+{
+  "evento": "movimento_confirmado",
+  "novo_estado": { … },
+  "jogador": 12,
+  "ai_move": { "from": "e7", "to": "e5" }   // opcional
+}
+```
 
-Lista os jogos disponíveis.
+---
 
-### `WebSocket /ws/{match_id}/{token}?game_type=chess&with_ai=true`
+## Testes
 
-Conexão bidirecional direta (sem proxy). Eventos:
+```bash
+# Backend (precisa de Postgres/Redis rodando – docker compose up -d)
+docker compose exec web python -m pytest -q
 
-| Evento | Direção | Descrição |
-|--------|---------|-----------|
-| `conexao_estabelecida` | server → client | Estado inicial + cor do jogador |
-| `movimento_confirmado` | server → client | Jogada validada + resposta da IA |
-| `movimento_invalido` | server → client | Jogada rejeitada |
-| `dice_rolled` | server → client | Resultado do dado (Ludo) |
-| `partida_reiniciada` | server → client | Estado resetado ao inicial |
-| `{ action: "move", payload: {from, to} }` | client → server | Envia jogada |
-| `{ action: "roll_dice" }` | client → server | Rola o dado (Ludo) |
-| `{ action: "restart" }` | client → server | Reinicia a partida |
+# Frontend (type‑check)
+cd frontend && npx tsc --noEmit
+```
+
+Integração (HTTP + WS) em `tests/test_integration.py`.
+
+---
+
+## Deploy Checklist
+
+- [ ] Domínio configurado no `Caddyfile` (`seu-dominio.com`).
+- [ ] Secrets (`JWT_SECRET`, `POSTGRES_PASSWORD`, OAuth keys, Firebase) no `.env` do servidor / GitHub Actions.
+- [ ] Migrações Alembic aplicadas (`alembic upgrade head`).
+- [ ] `docker compose -f docker-compose.prod.yml up -d --build` saúde OK (`/health`, `/metrics`).
+- [ ] Push notifications testadas (FCM token salvo, `/api/users/me/fcm`).
+- [ ] Alertas Prometheus/Grafana (latência, erro 5xx, fila de matchmaking).
+
+---
+
+## Desenvolvimento – Adicionar Novo Jogo
+
+1. Crie `src/games/novo_jogo.py` herdando `BaseGame`.
+2. Implemente `get_initial_state`, `validate_move`, `apply_move`, `check_victory`.
+3. Registre em `src/games/manager.py` no dict `ENGINES`.
+4. (Opcional) Adicione gerador de movimentos em `src/games/ai.py`.
+5. Front‑end: crie `NovoJogoBoard.tsx` e adicione em `Board.tsx` + `utils/games.ts`.
+6. Traduza textos nos arquivos `frontend/src/locales/*.json`.
+
+---
+
+## Comandos Úteis
+
+```bash
+# Backend
+docker compose up -d --build      # rebuild & sobe
+docker compose down -v            # para e remove volumes (limpa BD)
+docker compose exec web bash      # shell no container
+
+# Frontend
+cd frontend
+npm run build                     # build produção (pasta dist/)
+npx tsc --noEmit                  # type check
+npm run preview                   # preview do build
+
+# Testes
+python -m pytest tests/ -v --tb=short
+```
+
+---
+
+## Status do Projeto (Jul 2026)
+
+- ✅ 6 jogos implementados e testados (25 testes unitários)
+- ✅ Backend FastAPI + WebSocket + JWT + bcrypt
+- ✅ Frontend React 19 + Vite + Tailwind v4 + TypeScript
+- ✅ Docker Compose (dev + prod) com Postgres, Redis, Caddy, Tempo, Prometheus
+- ✅ Matchmaking ELO funcional
+- ✅ Persistência completa (event‑sourcing) + replay
+- ✅ Push notifications (FCM / APNs)
+- ✅ Testes de integração (HTTP + WS)
+- ✅ Observabilidade (traces + métricas)
+- ✅ i18n pt‑BR / EN
+- 🔄 OAuth Google / GitHub (endpoints prontos, faltam credenciais)
+- 🔄 CI/CD (GitHub Actions) – build & push imagem
+
+---
+
+## Licença
+
+MIT – sinta‑se livre para usar, modificar e distribuir. 🎉

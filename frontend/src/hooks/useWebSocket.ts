@@ -30,7 +30,8 @@ export function useWebSocket({
     setStatus("connecting");
     setError(null);
 
-    const url = `ws://localhost:8000/ws/${matchId}/${playerToken}?game_type=${gameType}&with_ai=${withAi}`;
+    const wsUrl = new URL(`ws://${import.meta.env.VITE_WS_URL}/ws/${matchId}/${playerToken}`, "http://example.com");
+    const url = `${wsUrl}?game_type=${gameType}&with_ai=${withAi}`;
 
     const ws = new WebSocket(url);
     wsRef.current = ws;
@@ -48,9 +49,7 @@ export function useWebSocket({
         }
 
         if (data.evento === "movimento_confirmado") {
-          if (data.novo_estado) {
-            setGameState(data.novo_estado as GameState);
-          }
+          if (data.novo_estado) setGameState(data.novo_estado as GameState);
           if (data.ai_move) setAiMove(data.ai_move as Move);
         }
 
@@ -93,9 +92,8 @@ export function useWebSocket({
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ action: "move", payload }));
       }
-    },
-    []
-  );
+  },
+  []);
 
   const rollDice = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

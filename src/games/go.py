@@ -74,10 +74,17 @@ class GoEngine(BaseGame):
 
     def validate_move(self, current_state: dict, move: dict, player_id: str) -> bool:
         board = current_state["board"]
+        if player_id not in ("black", "white"):
+            return False
         color = "B" if player_id == "black" else "W"
-        pos = move.get("position", "")
+        opponent_color = "W" if color == "B" else "B"
+        pos = move.get("position")
+        if not isinstance(pos, str):
+            return False
         if pos == "pass":
             return True
+        if len(pos) < 2:
+            return False
         try:
             c = ord(pos[0]) - 97
             r = BOARD_SIZE - int(pos[1:])
@@ -92,47 +99,80 @@ class GoEngine(BaseGame):
         group, libs = self._get_group(test_board, r, c)
         if libs:
             return True
+        # A jogada so e valida se capturar pelo menos um grupo adversario
+        # (caso contrario e suicide puro).
+        captured_any = False
         for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
             nr, nc = r + dr, c + dc
             if not self._in_bounds(nr, nc):
                 continue
-            if test_board[nr][nc] not in ("B", "W"):
+            neighbor = test_board[nr][nc]
+            if neighbor != opponent_color:
                 continue
-            if test_board[nr][nc] != color:
-                g, l = self._get_group(test_board, nr, nc)
-                if not l:
-                    return True
-        return False
+            g, l = self._get_group(test_board, nr, nc)
+            if not l:
+                captured_any = True
+                break
+        return captured_any
 
     def apply_move(self, current_state: dict, move: dict) -> dict:
         new_state = deepcopy(current_state)
         board = new_state["board"]
         player_id = new_state["current_player"]
+        if player_id not in ("black", "white"):
+            return new_state
         color = "B" if player_id == "black" else "W"
+        opponent = "W" if color == "B" else "B"
         pos = move.get("position", "")
         if pos == "pass":
             new_state["consecutive_passes"] += 1
+            new_state["ko"] = None
             new_state["current_player"] = "white" if player_id == "black" else "black"
             return new_state
+        if not isinstance(pos, str) or len(pos) < 2:
+            return new_state
+        try:
+            c = ord(pos[0]) - 97
+            r = BOARD_SIZE - int(pos[1:])
+        except (ValueError, IndexError):
+            return new_state
+        if not self._in_bounds(r, c) or board[r][c] != ".":
+            return new_state
+
         new_state["consecutive_passes"] = 0
-        c = ord(pos[0]) - 97
-        r = BOARD_SIZE - int(pos[1:])
         board[r][c] = color
-        captured = 0
+
+        total_captured = 0
+        captured_from_single_stone = False
+        single_capture_pos: tuple[int, int] | None = None
+
         for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
             nr, nc = r + dr, c + dc
             if not self._in_bounds(nr, nc):
                 continue
-            if board[nr][nc] not in ("B", "W"):
+            if board[nr][nc] != opponent:
                 continue
-            if board[nr][nc] != color:
-                g, l = self._get_group(board, nr, nc)
-                if not l:
-                    for gr, gc in g:
-                        board[gr][gc] = "."
-                        captured += 1
-        new_state["captures"][player_id] += captured
-        new_state["ko"] = pos if captured == 1 else None
+            g, l = self._get_group(board, nr, nc)
+            if not l:
+                for gr, gc in g:
+                    board[gr][gc] = "."
+                    total_captured += 1
+                if len(g) == 1 and total_captured == 1:
+                    captured_from_single_stone = True
+                    single_capture_pos = next(iter(g))
+
+        # Ko: exatamente uma pedra capturada, e ela era de um grupo de 1
+        if captured_from_single_stone and total_captured == 1 and single_capture_pos is not None:
+            my_group, _ = self._get_group(board, r, c)
+            if len(my_group) == 1:
+                cr, cc = single_capture_pos
+                new_state["ko"] = f"{chr(97 + cc)}{BOARD_SIZE - cr}"
+            else:
+                new_state["ko"] = None
+        else:
+            new_state["ko"] = None
+
+        new_state["captures"][player_id] += total_captured
         new_state["current_player"] = "white" if player_id == "black" else "black"
         return new_state
 

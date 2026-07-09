@@ -1,0 +1,39 @@
+{
+  "auth": {
+    "login": "Entrar",
+    "register": "Cadastrar",
+    "devLogin": "Login Rápido (Dev)",
+    "username": "Usuário",
+    "email": "Email",
+    "password": "Senha",
+    "submitLogin": "Entrar",
+    "submitRegister": "Cadastrar",
+    "noAccount": "Não tem conta?",
+    "hasAccount": "Já tem conta?",
+    "signUp": "Cadastre-se",
+    "signIn": "Entre",
+    "google": "Google",
+    "github": "GitHub",
+    "loading": "Entrando...",
+    "orDev": "Ou entre rápido para testar (modo dev)"
+  },
+  "matchmaking": {
+    "title": "Procurar Partida",
+    "game": "Jogo",
+    "vsAI": "Jogar contra IA (instantâneo)",
+    "joinQueue": "Entrar na Fila",
+    "searching": "Procurando oponente…",
+    "cancel": "Cancelar",
+    "matched": "Partida encontrada! Iniciando..."
+  },
+  "game": {
+    "restart": "Reiniciar",
+    "menu": "Menu",
+    "yourTurn": "Sua vez",
+    "opponentTurn": "Vez do oponente"
+  },
+  "replay": {
+    "prev": "← Anterior",
+    "next": "Próximo →"
+  }
+}

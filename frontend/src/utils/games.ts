@@ -22,23 +22,27 @@ export const PIECE_SYMBOLS: Record<string, Record<string, string>> = {
     w: "\u2B24", W: "\u2B24", b: "\u25EF", B: "\u25EF",
   },
   reversi: {
-    B: "\u2B24", W: "\u25EF",
+    B: "\u25CF", W: "\u25CB",
   },
   go: {
-    B: "\u2B24", W: "\u25EF",
+    B: "\u25CF", W: "\u25CB",
   },
 };
 
 const PIECE_COLORS: Record<string, Record<string, string>> = {
   checkers: {
-    w: "text-red-500", W: "text-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]",
-    b: "text-gray-100", B: "text-gray-100 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]",
+    w: "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]", 
+    W: "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]",
+    b: "text-gray-900 drop-shadow-[0_1px_2px_rgba(255,255,255,0.4)]", 
+    B: "text-gray-900 drop-shadow-[0_1px_2px_rgba(255,255,255,0.4)]",
   },
   reversi: {
-    B: "text-gray-100", W: "text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]",
+    B: "text-gray-900 drop-shadow-[0_1px_2px_rgba(255,255,255,0.4)]", 
+    W: "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]",
   },
   go: {
-    B: "text-gray-900", W: "text-gray-900",
+    B: "text-gray-900", 
+    W: "text-white",
   },
 };
 

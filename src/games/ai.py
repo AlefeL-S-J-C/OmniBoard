@@ -90,12 +90,13 @@ def _ludo_moves(game: BaseGame, state: dict, player_id: str) -> list[dict]:
     for i, pawn in enumerate(pawns):
         if pawn.get("done", False):
             continue
-        if pawn["home"] and dice == 6:
-            moves.append({"pawn_index": i})
+        if pawn.get("home", True):
+            if dice == 6:
+                moves.append({"pawn_index": i})
         elif pawn.get("stretch", -1) >= 0:
             if pawn["stretch"] + dice <= 6:
                 moves.append({"pawn_index": i})
-        elif not pawn["home"]:
+        else:
             moves.append({"pawn_index": i})
     return moves
 

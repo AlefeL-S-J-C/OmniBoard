@@ -1,3 +1,13 @@
+import asyncio
+from datetime import datetime, timezone
+
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import JSON
+
+from src.database.postgres import get_session
+from src.database.models import Match, MatchEvent
+from src.push.service import send_push
+
 from src.games.ai import AiPlayer
 from src.games.base import BaseGame
 from src.games.chess import ChessEngine
@@ -18,10 +28,13 @@ ENGINES = {
 
 AI_COLORS = ["black"]
 
-# Ludo uses its own internal player colors (red,green,yellow,blue)
-# but the gateway passes white/black. Map them here.
 LUDO_COLOR_MAP = {"white": "red", "black": "green"}
-LUDO_COLOR_REVERSE = {"red": "white", "green": "black", "yellow": "white", "blue": "black"}
+LUDO_COLOR_REVERSE = {
+    "red": "white",
+    "green": "black",
+    "yellow": "white",
+    "blue": "black",
+}
 
 
 def _normalize_player(game_type: str, player_id: str) -> str:
@@ -37,13 +50,15 @@ def _denormalize_player(game_type: str, ludo_color: str) -> str:
 
 
 class MatchConfig:
-    def __init__(self, game_type: str, with_ai: bool = True):
+    def __init__(self, game_type: str, with_ai: bool = True, player_white_id: int | None = None, player_black_id: int | None = None):
         engine_cls = ENGINES.get(game_type)
         if not engine_cls:
             raise ValueError(f"Jogo desconhecido: {game_type}")
         self.game_type = game_type
         self.engine = engine_cls()
         self.with_ai = with_ai
+        self.player_white_id = player_white_id
+        self.player_black_id = player_black_id
 
 
 class GameManager:
@@ -59,9 +74,7 @@ class GameManager:
         state = config.engine.get_initial_state()
         self._states[match_id] = state
         if config.with_ai:
-            self._ai_players[match_id] = AiPlayer(
-                config.game_type, config.engine
-            )
+            self._ai_players[match_id] = AiPlayer(config.game_type, config.engine)
         return state
 
     def get_state(self, match_id: str) -> dict | None:
@@ -70,7 +83,7 @@ class GameManager:
     def get_config(self, match_id: str) -> MatchConfig | None:
         return self._configs.get(match_id)
 
-    def process_move(
+    async def process_move(
         self, match_id: str, move: dict, player_id: str
     ) -> tuple[bool, dict | None, str | None, dict | None]:
         game = self._instances.get(match_id)
@@ -85,7 +98,7 @@ class GameManager:
         game_type = config.game_type if config else "chess"
         internal_id = _normalize_player(game_type, player_id)
 
-        if current["current_player"] != internal_id:
+        if self._get_current_player(current) != internal_id:
             return False, None, "Não é seu turno", None
 
         if not game.validate_move(current, move, internal_id):
@@ -93,23 +106,40 @@ class GameManager:
 
         new_state = game.apply_move(current, move)
         self._states[match_id] = new_state
+        await self._persist_event(match_id, player_id, move, new_state)
+
+        # notify opponent via push if opponent is human
+        if config and not config.with_ai:
+            opponent_internal = new_state.get("current_player")
+            if opponent_internal == "white":
+                opponent_user_id = config.player_white_id
+            elif opponent_internal == "black":
+                opponent_user_id = config.player_black_id
+            else:
+                opponent_user_id = None
+            if opponent_user_id:
+                asyncio.create_task(send_push(opponent_user_id, "Sua vez!", f"O adversário jogou."))
 
         winner = game.check_victory(new_state)
         ai_move = None
 
         if winner is None and self._has_ai_turn(match_id, new_state):
-            ai_move = self._run_ai(match_id, new_state)
-            if ai_move and game.validate_move(new_state, ai_move, new_state["current_player"]):
-                new_state = game.apply_move(new_state, ai_move)
-                self._states[match_id] = new_state
-                winner = game.check_victory(new_state)
+            ai_move = await asyncio.to_thread(self._run_ai_sync, match_id, new_state)
+            if ai_move:
+                if game.validate_move(new_state, ai_move, new_state.get("current_player", "")):
+                    new_state = game.apply_move(new_state, ai_move)
+                    self._states[match_id] = new_state
+                    await self._persist_event(match_id, "ai", ai_move, new_state)
+                    winner = game.check_victory(new_state)
+                else:
+                    ai_move = None
 
         if winner:
             new_state["vencedor"] = _denormalize_player(game_type, winner)
 
         return True, new_state, winner, ai_move
 
-    def roll_dice(self, match_id: str, player_id: str) -> tuple[dict, int] | None:
+    async def roll_dice(self, match_id: str, player_id: str) -> tuple[dict, int] | None:
         game = self._instances.get(match_id)
         if not game:
             return None
@@ -119,7 +149,7 @@ class GameManager:
         config = self._configs.get(match_id)
         game_type = config.game_type if config else "chess"
         internal_id = _normalize_player(game_type, player_id)
-        if current.get("current_player") != internal_id:
+        if self._get_current_player(current) != internal_id:
             return None
         if current.get("dice") is not None:
             return None
@@ -127,6 +157,9 @@ class GameManager:
         new_state = {**current, "dice": dice}
         self._states[match_id] = new_state
         return new_state, dice
+
+    def _get_current_player(self, state: dict) -> str:
+        return state.get("current_player", "white")
 
     def _has_ai_turn(self, match_id: str, state: dict) -> bool:
         ai = self._ai_players.get(match_id)
@@ -136,9 +169,9 @@ class GameManager:
         if not config:
             return False
         internal = _normalize_player(config.game_type, AI_COLORS[0])
-        return state["current_player"] in [internal]
+        return state.get("current_player") in [internal]
 
-    def _run_ai(self, match_id: str, state: dict) -> dict | None:
+    def _run_ai_sync(self, match_id: str, state: dict) -> dict | None:
         ai = self._ai_players.get(match_id)
         if not ai:
             return None
@@ -146,14 +179,13 @@ class GameManager:
         if not config:
             return None
 
-        player_id = state["current_player"]
+        player_id = state.get("current_player", "")
 
         if state.get("dice") is None and config.game_type == "ludo":
             game = self._instances.get(match_id)
-            if not game:
-                return None
-            dice = game._roll_dice()
-            state["dice"] = dice
+            if game:
+                dice = game._roll_dice()
+                state["dice"] = dice
 
         return ai.choose_move(state, player_id)
 
@@ -165,8 +197,28 @@ class GameManager:
         self._states[match_id] = state
         return state
 
-    def remove_match(self, match_id: str):
-        self._configs.pop(match_id, None)
-        self._instances.pop(match_id, None)
-        self._states.pop(match_id, None)
-        self._ai_players.pop(match_id, None)
+    async def _persist_event(self, match_id: str, player_id: str, move: dict, new_state: dict):
+        try:
+            async for session in get_session():
+                result = await session.execute(select(Match).where(Match.id == match_id))
+                match = result.scalar_one_or_none()
+                if not match:
+                    match = Match(id=match_id, game_type=self._configs[match_id].game_type)
+                    session.add(match)
+                    await session.flush()
+                turn = len(match.events) + 1
+                event = MatchEvent(
+                    match_id=match.id,
+                    turn=turn,
+                    player=player_id,
+                    action=str(move),
+                    new_state=new_state,
+                )
+                session.add(event)
+                await session.commit()
+                break
+        except Exception as e:
+            print(f"[persist] failed for match {match_id}: {e}")
+
+
+game_manager = GameManager()
