@@ -16,6 +16,7 @@ from src.games.go import GoEngine
 from src.games.ludo import LudoEngine
 from src.games.reversi import ReversiEngine
 from src.games.trilha import TrilhaEngine
+from src.games.rules import RulesRegistry, load_all_rules
 
 ENGINES = {
     "chess": ChessEngine,
@@ -25,6 +26,26 @@ ENGINES = {
     "reversi": ReversiEngine,
     "trilha": TrilhaEngine,
 }
+
+# Initialize the rules registry - the core now knows all rules!
+_rules_registry = RulesRegistry()
+load_all_rules(_rules_registry)
+
+
+def get_rules_registry() -> RulesRegistry:
+    """Retorna o registro central de regras - o núcleo conhece cada regra."""
+    return _rules_registry
+
+
+def get_game_rules(game_type: str):
+    """Retorna as regras declarativas de um jogo."""
+    return _rules_registry.get(game_type)
+
+
+def list_known_games() -> list[str]:
+    """Lista todos os jogos que o núcleo conhece."""
+    return _rules_registry.list()
+
 
 AI_COLORS = ["black"]
 

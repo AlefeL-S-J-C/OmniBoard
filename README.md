@@ -1,6 +1,6 @@
 # OmniBoard Engine
 
-Motor para jogos de tabuleiro em tempo real com arquitetura pluggable: o núcleo não conhece as regras dos jogos diretamente — interage com uma máquina de estados abstrata, permitindo que Xadrez, Dama, Go, Ludo, Trilha ou Reversi funcionem sob a mesma infraestrutura.
+Motor para jogos de tabuleiro em tempo real com arquitetura pluggable: o núcleo **conhece todas as regras de todos os jogos** via *Rules Registry* declarativo — interage com engines abstratas, permitindo que Xadrez, Dama, Go, Ludo, Trilha ou Reversi funcionem sob a mesma infraestrutura.
 
 ---
 
@@ -46,7 +46,8 @@ Motor para jogos de tabuleiro em tempo real com arquitetura pluggable: o núcleo
 ├── [ Matchmaking Pool ]   -- Redis (filas ELO)
 ├── [ GameManager ]        -- Valida e aplica jogadas
 │   ├── [ AI Player ]      -- Movimentos aleatórios válidos (plugável)
-│   └── [ Game Engine ]    -- Plugins (chess, checkers, go, ludo, trilha, reversi)
+│   ├── [ Game Engine ]    -- Plugins (chess, checkers, go, ludo, trilha, reversi)
+│   └── [ Rules Registry ] -- **Regras declarativas de todos os jogos** (novo)
 └── [ Banco Híbrido ]
     ├── Redis               -- Estado quente (salas ativas)
     └── PostgreSQL          -- Histórico permanente (event sourcing)
@@ -82,6 +83,13 @@ omniboard/
 │   │   ├── base.py
 │   │   ├── manager.py
 │   │   ├── ai.py
+│   │   ├── rules.py                  # **Rules Registry (novo)**
+│   │   ├── rules_chess.py            # **Regras declarativas do Xadrez (novo)**
+│   │   ├── rules_checkers.py         # **Regras declarativas da Dama (novo)**
+│   │   ├── rules_go.py               # **Regras declarativas do Go (novo)**
+│   │   ├── rules_ludo.py             # **Regras declarativas do Ludo (novo)**
+│   │   ├── rules_reversi.py          # **Regras declarativas do Reversi (novo)**
+│   │   ├── rules_trilha.py           # **Regras declarativas da Trilha (novo)**
 │   │   ├── chess.py / checkers.py / go.py
 │   │   ├── ludo.py / trilha.py / reversi.py
 │   │   └── push/
@@ -200,6 +208,8 @@ Serviços expostos:
 | `GET`  | `/api/auth/oauth/{provider}` | Inicia fluxo OAuth (google | github) |
 | `POST` | `/api/auth/oauth/{provider}/callback` | Recebe `code`, troca por token, devolve JWT |
 | `GET`  | `/api/games` | Lista jogos disponíveis |
+| `GET`  | `/api/games/rules` | **Lista todos os jogos com regras completas (novo)** |
+| `GET`  | `/api/games/rules/{game_type}` | **Retorna regras declarativas de um jogo (novo)** |
 | `POST` | `/api/matchmaking/join` | Entra na fila (`game_type`, `with_ai`) → `{matched, match_id}` |
 | `POST` | `/api/matchmaking/leave` | Sai da fila |
 | `GET`  | `/api/matches/{id}/events?turn=` | Histórico de lances (replay) |
@@ -258,9 +268,11 @@ Integração (HTTP + WS) em `tests/test_integration.py`.
 1. Crie `src/games/novo_jogo.py` herdando `BaseGame`.
 2. Implemente `get_initial_state`, `validate_move`, `apply_move`, `check_victory`.
 3. Registre em `src/games/manager.py` no dict `ENGINES`.
-4. (Opcional) Adicione gerador de movimentos em `src/games/ai.py`.
-5. Front‑end: crie `NovoJogoBoard.tsx` e adicione em `Board.tsx` + `utils/games.ts`.
-6. Traduza textos nos arquivos `frontend/src/locales/*.json`.
+4. **Crie `src/games/rules_novo_jogo.py` com `GameRules` declarativo** (peças, movimentos, capturas, vitórias, fases).
+5. Registre as regras em `src/games/rules.py` na função `load_all_rules`.
+6. (Opcional) Adicione gerador de movimentos em `src/games/ai.py`.
+7. Front‑end: crie `NovoJogoBoard.tsx` e adicione em `Board.tsx` + `utils/games.ts`.
+8. Traduza textos nos arquivos `frontend/src/locales/*.json`.
 
 ---
 
@@ -292,6 +304,7 @@ python -m pytest tests/ -v --tb=short
 ## Status do Projeto (Jul 2026)
 
 - ✅ 6 jogos implementados e testados (25 testes unitários)
+- ✅ **Rules Registry declarativo — o núcleo conhece todas as regras** (novo)
 - ✅ Backend FastAPI + WebSocket + JWT + bcrypt
 - ✅ Frontend React 19 + Vite + Tailwind v4 + TypeScript
 - ✅ Docker Compose (dev + prod) com Postgres, Redis, Caddy, Tempo, Prometheus

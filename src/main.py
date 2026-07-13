@@ -20,7 +20,7 @@ from src.core.observability import init_observability
 from src.database.postgres import init_db, close_db, get_session
 from src.database.redis_client import init_redis, close_redis, get_redis
 from src.core.security import create_token, decode_token, hash_password, verify_password
-from src.games.manager import ENGINES, GameManager, MatchConfig
+from src.games.manager import ENGINES, GameManager, MatchConfig, get_game_rules, list_known_games, get_game_rules, list_known_games
 from src.database.models import User, Match, MatchEvent
 from src.push.service import send_push
 
@@ -202,6 +202,27 @@ async def list_games():
             for k, v in ENGINES.items()
         ]
     }
+
+
+# ---------- Game Rules (Core knows every rule!) ----------
+@app.get("/api/games/rules")
+async def list_all_game_rules():
+    """Lista todos os jogos com suas regras declarativas completas."""
+    games = []
+    for game_type in list_known_games():
+        rules = get_game_rules(game_type)
+        if rules:
+            games.append(rules.model_dump())
+    return {"games": games}
+
+
+@app.get("/api/games/rules/{game_type}")
+async def get_game_rules_endpoint(game_type: str):
+    """Retorna as regras declarativas completas de um jogo específico."""
+    rules = get_game_rules(game_type)
+    if not rules:
+        raise HTTPException(status_code=404, detail=f"Jogo não encontrado: {game_type}")
+    return rules.model_dump()
 
 
 # ---------- Matchmaking ----------

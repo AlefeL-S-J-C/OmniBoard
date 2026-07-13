@@ -1,0 +1,62 @@
+from src.games.rules import GameRules, PieceType, MovePattern, CaptureRule, VictoryCondition
+
+CHESS_RULES = GameRules(
+    game_type="chess",
+    name="Xadrez",
+    description="Jogo de estratégia para 2 jogadores. Objetivo: xeque-mate ao rei adversário.",
+    board={"type": "grid", "size": 8, "coordinates": "algebraic"},
+    players={"colors": ["white", "black"], "first_move": "white"},
+    pieces={
+        "white": [
+            PieceType(symbol="♔", name="Rei", color="white", moves="1_any_dir", special=["castling", "check_victim"]),
+            PieceType(symbol="♕", name="Rainha", color="white", moves="any_dir_unlimited", value=9),
+            PieceType(symbol="♖", name="Torre", color="white", moves="orthogonal_unlimited", special=["castling"], value=5),
+            PieceType(symbol="♗", name="Bispo", color="white", moves="diagonal_unlimited", value=3),
+            PieceType(symbol="♘", name="Cavalo", color="white", moves="L_shape", jumps=True, value=3),
+            PieceType(symbol="♙", name="Peão", color="white", moves="forward_1_or_2_first", captures="diagonal_1", special=["promotion", "en_passant"], value=1),
+        ],
+        "black": [
+            PieceType(symbol="♚", name="Rei", color="black", moves="1_any_dir", special=["castling", "check_victim"]),
+            PieceType(symbol="♛", name="Rainha", color="black", moves="any_dir_unlimited", value=9),
+            PieceType(symbol="♜", name="Torre", color="black", moves="orthogonal_unlimited", special=["castling"], value=5),
+            PieceType(symbol="♝", name="Bispo", color="black", moves="diagonal_unlimited", value=3),
+            PieceType(symbol="♞", name="Cavalo", color="black", moves="L_shape", jumps=True, value=3),
+            PieceType(symbol="♟", name="Peão", color="black", moves="forward_1_or_2_first", captures="diagonal_1", special=["promotion", "en_passant"], value=1),
+        ],
+    },
+    move_patterns=[
+        MovePattern(name="rei", description="1 casa qualquer direção", pattern={"type": "king", "range": 1}),
+        MovePattern(name="rainha", description="Qualquer direção, casas ilimitadas", pattern={"type": "slider", "directions": 8}),
+        MovePattern(name="torre", description="Ortogonal, casas ilimitadas", pattern={"type": "slider", "directions": 4}),
+        MovePattern(name="bispo", description="Diagonal, casas ilimitadas", pattern={"type": "slider", "directions": 4, "diagonal_only": True}),
+        MovePattern(name="cavalo", description="L (2+1), pula peças", pattern={"type": "knight", "jumps": True}),
+        MovePattern(name="peao_avanco", description="1 casa frente (2 na estreia)", pattern={"type": "pawn_advance", "double_first": True}),
+        MovePattern(name="peao_captura", description="1 casa diagonal", pattern={"type": "pawn_capture"}),
+        MovePattern(name="roque", description="Rei 2 casas + torre passa por cima", pattern={"type": "castling", "conditions": ["king_not_moved", "rook_not_moved", "path_clear", "not_in_check", "not_through_check"]}),
+        MovePattern(name="promocao", description="Peão na última fileira vira D/T/B/C", pattern={"type": "promotion", "choices": ["Q", "R", "B", "N"]}),
+        MovePattern(name="en_passant", description="Captura peão que avançou 2 casas", pattern={"type": "en_passant", "condition": "adjacent_pawn_double_advance"}),
+    ],
+    capture_rules=[
+        CaptureRule(type="standard", description="Ocupa casa da peça adversária", mandatory=True),
+        CaptureRule(type="en_passant", description="Peão captura peão adjacente que avançou 2", mandatory=True),
+    ],
+    special_rules=[
+        {"name": "xeque", "description": "Rei atacado deve responder", "mandatory_response": True},
+        {"name": "xeque_mate", "description": "Rei em xeque sem movimentos legais = derrota", "ends_game": True},
+        {"name": "afogamento", "description": "Rei não em xeque mas sem movimentos = empate", "ends_game": True, "result": "draw"},
+        {"name": "empate_50_lances", "description": "50 lances sem captura ou movimento de peão = empate", "counter": "halfmove_clock"},
+        {"name": "repeticao_3x", "description": "Mesma posição 3 vezes = empate", "detection": "position_history"},
+        {"name": "material_insuficiente", "description": "Rei vs Rei, Rei+B vs Rei, Rei+C vs Rei = empate", "auto_draw": True},
+    ],
+    victory_conditions=[
+        VictoryCondition(type="checkmate", description="Xeque-mate ao rei adversário", details={"winner": "player_delivering_mate"}),
+        VictoryCondition(type="resignation", description="Adversário desiste", details={"winner": "opponent"}),
+        VictoryCondition(type="timeout", description="Tempo esgotado", details={"winner": "opponent_with_time"}),
+        VictoryCondition(type="draw_agreement", description="Empate acordado", details={"result": "draw"}),
+        VictoryCondition(type="stalemate", description="Afogamento (rei sem movimentos legais, não em xeque)", details={"result": "draw"}),
+        VictoryCondition(type="fifty_move_rule", description="Regra dos 50 lances", details={"result": "draw"}),
+        VictoryCondition(type="threefold_repetition", description="Repetição tripla", details={"result": "draw"}),
+        VictoryCondition(type="insufficient_material", description="Material insuficiente", details={"result": "draw"}),
+    ],
+    ai_difficulty="medium",
+)
