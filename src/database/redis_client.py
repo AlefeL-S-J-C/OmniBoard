@@ -2,7 +2,18 @@ import os
 
 import redis.asyncio as aioredis
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+def get_redis_url() -> str:
+    """Get Redis URL, handling both local and Docker environments."""
+    url = os.getenv("REDIS_URL")
+    if url:
+        return url
+    host = os.getenv("REDIS_HOST", "localhost")
+    port = os.getenv("REDIS_PORT", "6379")
+    return f"redis://{host}:{port}/0"
+
+
+REDIS_URL = get_redis_url()
 
 _redis: aioredis.Redis | None = None
 

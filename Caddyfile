@@ -1,26 +1,47 @@
-# Replace with your real domain(s)
+# Caddyfile for OmniBoard
+# 
+# For local development:
+#   - Run: caddy run --config Caddyfile.dev
+# 
+# For production:
+#   - Replace omniboard.example.com with your actual domain
+#   - Run: docker compose -f docker-compose.prod.yml up -d
+
 {
     admin off
-    email your-email@example.com
+    # email your-email@example.com  # Uncomment for production
 }
 
-omniboard.example.com {
-    # Frontend
+# Local development (accessible via localhost)
+localhost {
     handle_path /api/* {
-        reverse_proxy web:8000
+        reverse_proxy http://web:8000
     }
     handle_path /ws/* {
-        reverse_proxy web:8000
+        reverse_proxy http://web:8000
     }
     handle {
-        reverse_proxy frontend:80
-    }
-
-    # Optional: enable HSTS, security headers
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "DENY"
-        Referrer-Policy "strict-origin-when-cross-origin"
+        reverse_proxy http://frontend:80
     }
 }
+
+# Production (replace with your domain)
+# omniboard.example.com {
+#     handle_path /api/* {
+#         reverse_proxy web:8000
+#     }
+#     handle_path /ws/* {
+#         reverse_proxy web:8000
+#     }
+#     handle {
+#         reverse_proxy frontend:80
+#     }
+#
+#     # Security headers
+#     header {
+#         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+#         X-Content-Type-Options "nosniff"
+#         X-Frame-Options "DENY"
+#         Referrer-Policy "strict-origin-when-cross-origin"
+#     }
+# }

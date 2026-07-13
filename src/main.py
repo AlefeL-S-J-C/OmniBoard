@@ -4,6 +4,9 @@ import time
 from contextlib import asynccontextmanager
 from typing import Annotated, Optional
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
@@ -58,7 +61,10 @@ async def get_current_user(
 
 async def rate_limit_ws(player_id: int, limit: int = 30, window: int = 60):
     """Simple token‑bucket using Redis INCR with TTL."""
-    redis = get_redis()
+    try:
+        redis = get_redis()
+    except RuntimeError:
+        return  # Redis not initialized, skip rate limiting
     key = f"ratelimit:ws:{player_id}"
     current = await redis.incr(key)
     if current == 1:

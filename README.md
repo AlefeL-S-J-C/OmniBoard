@@ -59,19 +59,21 @@ Motor para jogos de tabuleiro em tempo real com arquitetura pluggable: o núcleo
 ```
 omniboard/
 ├── docker-compose.yml                # dev (hot‑reload)
-├── docker-compose.prod.yml           # prod (Caddy + TLS + Tempo + Prometheus)
-├── Caddyfile                         # reverse‑proxy + HTTPS automático
-├── Dockerfile                        # multi‑stage Python
+├── docker-compose.prod.yml           # prod (Caddy + TLS + Tempo + Prometheus)
+├── Caddyfile                         # reverse-proxy + HTTPS automático (produção)
+├── Caddyfile.dev                     # reverse-proxy para desenvolvimento local (localhost)
+├── Dockerfile                        # multi-stage Python
 ├── requirements.txt
 ├── pytest.ini
-├── .github/workflows/ci.yml          # lint, type‑check, test, build
+├── alembic.ini                       # configuração Alembic (migrações)
+├── .github/workflows/ci.yml          # lint, type-check, test, build
 ├── src/
 │   ├── main.py                       # FastAPI, WS, rotas HTTP
 │   ├── core/
 │   │   ├── gateway.py                # Gerenciamento de conexões WS
 │   │   ├── lobby.py                  # Matchmaking (Redis + ELO)
 │   │   ├── security.py               # JWT + bcrypt
-│   │   └── observability.py          # OpenTelemetry + Prometheus
+│   │   └── observability.py          # OpenTelemetry + Prometheus (opcional em dev)
 │   ├── database/
 │   │   ├── postgres.py               # SQLAlchemy assíncrono + modelos
 │   │   ├── redis_client.py
@@ -92,6 +94,7 @@ omniboard/
 │   ├── package.json
 │   ├── vite.config.ts
 │   ├── tsconfig.json
+│   ├── .env.example                  # exemplo de variáveis frontend
 │   └── src/
 │       ├── main.tsx
 │       ├── App.tsx
@@ -105,6 +108,9 @@ omniboard/
 │           ├── MatchmakingScreen.tsx
 │           ├── ReplayPanel.tsx
 │           ├── GameInfo.tsx / GameHelp.tsx / ConnectionStatus.tsx
+├── alembic/                          # migrações de banco (Alembic)
+│   ├── env.py
+│   └── versions/
 └── tests/
     └── test_games.py + test_integration.py
 ```
@@ -127,26 +133,31 @@ omniboard/
 cp .env.example .env
 # Edite .env com suas chaves:
 #   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+#   POSTGRES_HOST=localhost, POSTGRES_PORT=5432    # ou db:5432 no Docker
+#   REDIS_HOST=localhost, REDIS_PORT=6379           # ou redis:6379 no Docker
 #   JWT_SECRET (>=32 chars)
 #   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI
 #   GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET / GITHUB_REDIRECT_URI
 #   FIREBASE_SERVICE_ACCOUNT_JSON (caminho do arquivo ou JSON inline)
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317   # opcional (produção com Tempo)
 #   LOG_LEVEL=INFO
 ```
 
 Frontend (`frontend/.env`):
 
 ```env
-VITE_API_URL=https://seu-dominio.com
-VITE_WS_URL=seu-dominio.com
+VITE_API_URL=http://localhost:8000
+VITE_WS_URL=localhost:8000
 ```
+
+Copie de `frontend/.env.example`.
 
 ---
 
 ### 2️⃣  Desenvolvimento (hot‑reload)
 
 ```bash
-# sobe Postgres, Redis e API com reload
+# sobe Postgres, Redis e API com reload + roda migrações (alembic upgrade head)
 docker compose up -d
 
 # front‑end
@@ -162,11 +173,13 @@ A API fica em `http://localhost:8000` (Swagger em `/docs`).
 ### 3️⃣  Produção (HTTPS automático via Caddy)
 
 ```bash
-# certifique‑se de que o domínio aponta para o IP do host
+# 1. Configure seu domínio no Caddyfile (substitua omniboard.example.com)
+# 2. Certifique-se de que o domínio aponta para o IP do host
+# 3. Suba a stack (roda migrações + build das imagens)
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Caddy obtém/renova certificados Let’s Encrypt automaticamente.  
+Caddy obtém/renova certificados Let's Encrypt automaticamente.  
 Serviços expostos:
 
 | Serviço | Porta | Descrição |
@@ -233,7 +246,7 @@ Integração (HTTP + WS) em `tests/test_integration.py`.
 
 - [ ] Domínio configurado no `Caddyfile` (`seu-dominio.com`).
 - [ ] Secrets (`JWT_SECRET`, `POSTGRES_PASSWORD`, OAuth keys, Firebase) no `.env` do servidor / GitHub Actions.
-- [ ] Migrações Alembic aplicadas (`alembic upgrade head`).
+- [ ] Migrações Alembic aplicadas (`alembic upgrade head` – roda automaticamente no `docker compose up`).
 - [ ] `docker compose -f docker-compose.prod.yml up -d --build` saúde OK (`/health`, `/metrics`).
 - [ ] Push notifications testadas (FCM token salvo, `/api/users/me/fcm`).
 - [ ] Alertas Prometheus/Grafana (latência, erro 5xx, fila de matchmaking).
@@ -259,6 +272,11 @@ docker compose up -d --build      # rebuild & sobe
 docker compose down -v            # para e remove volumes (limpa BD)
 docker compose exec web bash      # shell no container
 
+# Migrações (Alembic)
+docker compose exec web alembic revision --autogenerate -m "mensagem"
+docker compose exec web alembic upgrade head
+docker compose exec web alembic downgrade -1
+
 # Frontend
 cd frontend
 npm run build                     # build produção (pasta dist/)
@@ -283,6 +301,8 @@ python -m pytest tests/ -v --tb=short
 - ✅ Testes de integração (HTTP + WS)
 - ✅ Observabilidade (traces + métricas)
 - ✅ i18n pt‑BR / EN
+- ✅ Migrações de banco com Alembic
+- ✅ Configuração por ambiente (.env + .env.example)
 - 🔄 OAuth Google / GitHub (endpoints prontos, faltam credenciais)
 - 🔄 CI/CD (GitHub Actions) – build & push imagem
 
